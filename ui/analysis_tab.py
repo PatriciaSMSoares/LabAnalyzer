@@ -2,6 +2,7 @@ import time
 import traceback
 from math import ceil
 from pathlib import Path
+from matplotlib.figure import Figure as MplFigure
 
 from PyQt6.QtWidgets import (
     QWidget, QSplitter, QVBoxLayout, QHBoxLayout,
@@ -281,12 +282,14 @@ class AnalysisTab(QWidget):
 
         visible_datasets = [ds for ds in self._datasets if ds.visible]
         if not visible_datasets:
-            self._plot_canvas.figure.clear()
-            ax = self._plot_canvas.figure.add_subplot(111)
+            # Main-thread safe: directly update the canvas figure
+            fig = self._plot_canvas.figure
+            fig.clear()
+            ax = fig.add_subplot(111)
             ax.text(0.5, 0.5, 'No files selected for display',
                     transform=ax.transAxes, ha='center', va='center',
                     fontsize=14, color='gray')
-            self._plot_canvas.refresh()
+            self._plot_canvas.canvas.draw_idle()
             self._rendering = False
             return
 
@@ -306,27 +309,33 @@ class AnalysisTab(QWidget):
             'extra': cfg.extra,
         }
 
-        figure = self._plot_canvas.figure
+        # Create a detached figure for background-thread rendering.
+        # This avoids the matplotlib/Qt thread-safety race condition where
+        # Qt's paint event reads the canvas figure while the worker modifies it.
+        old_fig = self._plot_canvas.figure
+        new_fig = MplFigure(figsize=old_fig.get_size_inches(), dpi=old_fig.dpi)
+        new_fig.patch.set_facecolor(old_fig.get_facecolor())
+
         layout_mode = cfg.layout
         custom_config = self._custom_layout_config
         custom_active = self._custom_layout_active
-        all_datasets = self._datasets  # pass all (not just visible) for cell filtering
+        all_datasets = self._datasets
         analyses = self._analyses
         analysis_instance = analysis_cls()
 
         def render_fn():
-            # Custom layout takes priority when active and configured
+            # All matplotlib operations run on new_fig (not attached to any Qt widget)
             if custom_active and custom_config is not None:
-                _render_custom_layout(figure, custom_config, all_datasets,
+                _render_custom_layout(new_fig, custom_config, all_datasets,
                                       analyses, config_dict)
             else:
-                subplot_data = _build_subplot_grid(figure, layout_mode, visible_datasets)
+                subplot_data = _build_subplot_grid(new_fig, layout_mode, visible_datasets)
                 for ax, ds_subset in subplot_data:
                     if ds_subset:
-                        analysis_instance.render(ds_subset, config_dict, figure, ax=ax)
+                        analysis_instance.render(ds_subset, config_dict, new_fig, ax=ax)
 
-            # Apply axis ranges to every axes in figure
-            for ax in figure.get_axes():
+            # Apply axis ranges to every axes in the new figure
+            for ax in new_fig.get_axes():
                 if cfg.x_min is not None or cfg.x_max is not None:
                     current = ax.get_xlim()
                     xmin = cfg.x_min if cfg.x_min is not None else current[0]
@@ -349,12 +358,19 @@ class AnalysisTab(QWidget):
                         pass
 
         worker = RenderWorker(render_fn)
-        worker.signals.result.connect(self._on_render_complete)
+        worker.signals.result.connect(lambda elapsed: self._on_render_complete(elapsed, new_fig))
         worker.signals.error.connect(self._on_render_error)
         worker.signals.finished.connect(lambda: setattr(self, '_rendering', False))
         self._thread_pool.start(worker)
 
-    def _on_render_complete(self, elapsed: float):
+    def _on_render_complete(self, elapsed: float, new_fig: MplFigure | None = None):
+        # Swap the rendered figure into the canvas (main thread — Qt-safe)
+        if new_fig is not None:
+            old_fig = self._plot_canvas.figure
+            self._plot_canvas.figure = new_fig
+            self._plot_canvas.canvas.figure = new_fig
+            new_fig.set_canvas(self._plot_canvas.canvas)
+            old_fig.set_canvas(None)
         self._plot_canvas.canvas.draw_idle()
         self._error_widget.setVisible(False)
         self.render_complete.emit(elapsed)

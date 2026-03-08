@@ -144,7 +144,15 @@ class MainWindow(QMainWindow):
         if len(title) > 30:
             title = title[:27] + '...'
 
-        tab = AnalysisTab(datasets, measurement_cls)
+        try:
+            tab = AnalysisTab(datasets, measurement_cls)
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(
+                self, 'Tab Creation Error',
+                f'Failed to create analysis tab:\n{e}\n\n{traceback.format_exc()[:500]}'
+            )
+            return
         tab.render_complete.connect(
             lambda elapsed: self._status_render_label.setText(f'Last render: {elapsed*1000:.0f}ms')
         )

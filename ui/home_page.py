@@ -200,7 +200,8 @@ class HomePage(QWidget):
             QMessageBox.warning(self, 'No Files', 'Please add at least one data file.')
             return
 
-        if self._selected_measurement.requires_mass_file and not self._mass_entries:
+        mass_entries = self._mass_widget.get_mass_entries()
+        if self._selected_measurement.requires_mass_file and not mass_entries:
             reply = QMessageBox.question(
                 self, 'Mass File Missing',
                 f'{self._selected_measurement.display_name} works best with a mass file.\n'
@@ -240,4 +241,4 @@ class HomePage(QWidget):
             return
 
         color_cycle.assign_colors(datasets)
-        self.create_tab_requested.emit(self._selected_measurement, datasets, self._mass_entries)
+        self.create_tab_requested.emit(self._selected_measurement, datasets, mass_entries)
