@@ -1,0 +1,20 @@
+/* LabAnalyzer - Light Theme QSS */
+/* This file is loaded as a fallback; the theme is applied via theme.py */
+
+QWidget {
+    background-color: #F5F7FA;
+    color: #1A1A2E;
+    font-size: 11pt;
+}
+
+QPushButton {
+    background-color: #2E75B6;
+    color: #FFFFFF;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+}
+
+QPushButton:hover {
+    background-color: #1F4E79;
+}
