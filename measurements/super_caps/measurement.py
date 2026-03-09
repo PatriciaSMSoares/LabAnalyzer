@@ -7,7 +7,7 @@ class SuperCapsMeasurement(BaseMeasurement):
     measurement_id = 'super_caps'
     display_name = 'Supercapacitors'
     requires_mass_file = True
-    supported_extensions = ['.mpt', '.sta', '.csv', '.xlsx', '.txt']
+    supported_extensions = ['.mpt', '.csv', '.xlsx', '.txt']
 
     @classmethod
     def get_analyses(cls) -> list:

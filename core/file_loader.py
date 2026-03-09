@@ -12,7 +12,7 @@ class FileParseError(Exception):
 class FileLoader:
     """Loads various data file types into pandas DataFrames."""
 
-    SUPPORTED_EXTENSIONS = {'.csv', '.xlsx', '.xls', '.txt', '.dat', '.fcd', '.mpt', '.sta'}
+    SUPPORTED_EXTENSIONS = {'.csv', '.xlsx', '.xls', '.txt', '.dat', '.fcd', '.mpt'}
 
     def load(self, path: Path) -> pd.DataFrame:
         """Load a file and return a DataFrame."""
@@ -39,7 +39,6 @@ class FileLoader:
             '.xls': self._parse_excel,
             '.fcd': self._parse_fcd,
             '.mpt': self._parse_eclab,
-            '.sta': self._parse_eclab,
         }
         return parsers.get(ext, self._parse_text)
 
@@ -147,6 +146,14 @@ class FileLoader:
 
     def _parse_eclab(self, path: Path) -> pd.DataFrame:
         """Parse EC-Lab .mpt and .sta files with 'Nb header lines' header."""
+        # Detect binary files (EC-Lab .sta can be binary format)
+        with open(path, 'rb') as fb:
+            header_bytes = fb.read(512)
+        if b'\x00' in header_bytes:
+            raise FileParseError(
+                f"{path.name} is a binary EC-Lab file (.sta binary format) and cannot be parsed as text. "
+                "Export the file as .mpt (ASCII) from EC-Lab to load it."
+            )
         with open(path, 'r', encoding='latin-1', errors='replace') as f:
             lines = f.readlines()
         nb_header = None
@@ -181,7 +188,12 @@ class FileLoader:
         for col in df.columns:
             try:
                 converted = pd.to_numeric(df[col], errors='coerce')
-                # Only replace if the conversion succeeded for most values
+                # If standard conversion fails for most values, try comma-as-decimal
+                if converted.notna().sum() < df[col].notna().sum() * 0.5:
+                    converted = pd.to_numeric(
+                        df[col].astype(str).str.replace(',', '.', regex=False),
+                        errors='coerce',
+                    )
                 if converted.notna().sum() >= df[col].notna().sum() * 0.5:
                     df[col] = converted
             except Exception:

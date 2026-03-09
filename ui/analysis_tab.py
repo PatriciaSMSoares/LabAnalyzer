@@ -181,6 +181,8 @@ class AnalysisTab(QWidget):
         self._custom_layout_config: CustomLayoutConfig | None = None
         self._custom_layout_active: bool = False
         self._last_color_scheme = 'Tab10'
+        self._pending_new_fig: MplFigure | None = None
+        self._render_queued: bool = False
         self._setup_ui()
         QTimer.singleShot(100, self._do_render)
 
@@ -262,10 +264,16 @@ class AnalysisTab(QWidget):
             config.layout = 'Custom'
 
         self._current_config = config
-        self._render_timer.start(50)
+        self._schedule_render(50)
 
     def _on_dataset_changed(self):
-        self._render_timer.start(150)
+        self._schedule_render(150)
+
+    def _schedule_render(self, delay_ms: int):
+        if self._rendering:
+            self._render_queued = True
+        else:
+            self._render_timer.start(delay_ms)
 
     def _do_render(self):
         if self._rendering:
@@ -357,14 +365,17 @@ class AnalysisTab(QWidget):
                     except Exception:
                         pass
 
+        self._pending_new_fig = new_fig
         worker = RenderWorker(render_fn)
-        worker.signals.result.connect(lambda elapsed: self._on_render_complete(elapsed, new_fig))
+        worker.signals.result.connect(self._on_render_complete)
         worker.signals.error.connect(self._on_render_error)
-        worker.signals.finished.connect(lambda: setattr(self, '_rendering', False))
+        worker.signals.finished.connect(self._on_render_finished)
         self._thread_pool.start(worker)
 
-    def _on_render_complete(self, elapsed: float, new_fig: MplFigure | None = None):
+    def _on_render_complete(self, elapsed: float):
         # Swap the rendered figure into the canvas (main thread — Qt-safe)
+        new_fig = self._pending_new_fig
+        self._pending_new_fig = None
         if new_fig is not None:
             old_fig = self._plot_canvas.figure
             self._plot_canvas.figure = new_fig
@@ -375,6 +386,13 @@ class AnalysisTab(QWidget):
         self._error_widget.setVisible(False)
         self.render_complete.emit(elapsed)
         self.status_message.emit(f'Rendered in {elapsed*1000:.0f}ms')
+
+    def _on_render_finished(self):
+        self._rendering = False
+        # If a config change arrived while rendering, trigger a new render now
+        if self._render_queued:
+            self._render_queued = False
+            self._render_timer.start(50)
 
     def _on_render_error(self, error: str):
         self._last_error = error

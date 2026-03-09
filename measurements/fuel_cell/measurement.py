@@ -7,7 +7,7 @@ class FuelCellMeasurement(BaseMeasurement):
     measurement_id = 'fuel_cell'
     display_name = 'Fuel Cell'
     requires_mass_file = False
-    supported_extensions = ['.fcd', '.mpt', '.sta', '.csv', '.txt']
+    supported_extensions = ['.fcd', '.mpt', '.csv', '.txt']
 
     @classmethod
     def get_analyses(cls) -> list:

@@ -7,7 +7,7 @@ class PowerMeasurement(BaseMeasurement):
     measurement_id = 'power'
     display_name = 'Power'
     requires_mass_file = False
-    supported_extensions = ['.fcd', '.mpt', '.sta', '.csv', '.xlsx', '.txt']
+    supported_extensions = ['.fcd', '.mpt', '.csv', '.xlsx', '.txt']
 
     @classmethod
     def get_analyses(cls) -> list:
