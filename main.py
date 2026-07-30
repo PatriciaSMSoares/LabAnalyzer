@@ -16,7 +16,7 @@ import measurements  # noqa: F401 - triggers registration
 from app import create_app
 from ui.main_window import MainWindow
 
-logger = logging.getLogger(__name__)s
+logger = logging.getLogger(__name__)
 
 
 def _install_exception_hooks():
