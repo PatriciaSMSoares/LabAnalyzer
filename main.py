@@ -7,13 +7,16 @@ from pathlib import Path
 # Ensure the project root is on the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Ensure the project root (current directory) is on the path
+sys.path.insert(0, str(Path(__file__).parent.resolve()))
+
 # Register all measurements before importing UI
-import labanalyzer.measurements  # noqa: F401 - triggers registration
+import measurements  # noqa: F401 - triggers registration
 
-from labanalyzer.app import create_app
-from labanalyzer.ui.main_window import MainWindow
+from app import create_app
+from ui.main_window import MainWindow
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)s
 
 
 def _install_exception_hooks():
