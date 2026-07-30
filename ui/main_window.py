@@ -133,9 +133,9 @@ class MainWindow(QMainWindow):
         measurement_cls = session_config.get('measurement_cls')
         datasets = session_config.get('datasets', [])
         if measurement_cls and datasets:
-            self._create_analysis_tab(measurement_cls, datasets, [])
+            self._create_analysis_tab(measurement_cls, datasets)
 
-    def _create_analysis_tab(self, measurement_cls, datasets: list, mass_entries: list):
+    def _create_analysis_tab(self, measurement_cls, datasets: list):
         """Create and add an analysis tab."""
         self._tab_count += 1
         n_files = len(datasets)

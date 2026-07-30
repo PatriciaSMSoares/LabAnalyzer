@@ -167,6 +167,7 @@ class AnalysisTab(QWidget):
         super().__init__(parent)
         self._datasets = datasets
         self._measurement_cls = measurement_cls
+
         self._analyses = measurement_cls.get_analyses()
         self._color_cycle = ColorCycle()
         self._color_cycle.assign_colors(datasets)

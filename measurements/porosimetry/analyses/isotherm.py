@@ -25,8 +25,8 @@ class IsothermAnalysis(BaseAnalysis):
                 continue
             df = ds.raw_data
 
-            x_col = _find_col(df, ['p/p0', 'relative pressure', 'p0', 'pressure'])
-            y_col = _find_col(df, ['qty adsorbed', 'quantity adsorbed', 'volume adsorbed', 'adsorbed', 'qty'])
+            x_col = _find_col(df, ['p/p0', 'relative pressure', 'pressure','p/po'])
+            y_col = _find_col(df, ['Volume', 'STP'])
 
             if x_col is None:
                 # Try first numeric column as x
@@ -50,7 +50,7 @@ class IsothermAnalysis(BaseAnalysis):
             y = df[y_col].dropna()
             min_len = min(len(x), len(y))
             x = x.iloc[:min_len].values
-            y = y.iloc[:min_len].values
+            y = y.iloc[:min_len].values/ ds.mass if ds.mass else y[:min_len]  # Normalize by mass if available
 
             color = ds.color or None
 

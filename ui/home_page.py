@@ -217,6 +217,9 @@ class HomePage(QWidget):
         failed = []
         color_cycle = ColorCycle()
 
+        print(mass_entries)  # Debugging line to check mass entries
+
+
         for path in self._files:
             try:
                 df = loader.load(path)
@@ -224,6 +227,7 @@ class HomePage(QWidget):
                     file_path=path,
                     display_name=path.stem,
                     raw_data=df,
+                    mass = next((entry.mass_mg for entry in mass_entries if entry.sample_id == path.stem), None),
                     group_name=path.parent.name,
                 )
                 datasets.append(ds)

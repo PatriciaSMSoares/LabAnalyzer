@@ -32,6 +32,7 @@ class BETAnalysis(BaseAnalysis):
         table_data = []
         has_data = False
 
+
         for ds in datasets:
             if not ds.visible:
                 continue
@@ -53,7 +54,9 @@ class BETAnalysis(BaseAnalysis):
             y = df[y_col].dropna().values.astype(float)
             min_len = min(len(x), len(y))
             x = x[:min_len]
-            y = y[:min_len]
+            print(y)
+            y = y[:min_len] / ds.mass if ds.mass else y[:min_len]  # Normalize by mass if available
+            print(y)
 
             # BET linearization: P/(V*(P0-P)) vs P/P0
             # Filter range 0.05-0.35

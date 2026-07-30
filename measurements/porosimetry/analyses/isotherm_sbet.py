@@ -26,9 +26,12 @@ class IsothermSBETAnalysis(BaseAnalysis):
             if not ds.visible:
                 continue
             df = ds.raw_data
+            print(ds.mass)  # Debugging line to check mass entries
 
-            x_col = _find_col(df, ['p/p0', 'relative pressure', 'pressure'])
-            y_col = _find_col(df, ['qty adsorbed', 'quantity adsorbed', 'volume adsorbed', 'adsorbed'])
+            x_col = _find_col(df, ['p/p0', 'relative pressure', 'pressure','p/po'])
+            y_col = _find_col(df, ['volume', 'adsorbed'])
+
+            print(f"Dataset: {ds.display_name}, x_col: {x_col}, y_col: {y_col}")
 
             num_cols = df.select_dtypes(include=[np.number]).columns
             if x_col is None and len(num_cols) >= 1:
@@ -43,7 +46,7 @@ class IsothermSBETAnalysis(BaseAnalysis):
             y = df[y_col].dropna().values.astype(float)
             min_len = min(len(x), len(y))
             x = x[:min_len]
-            y = y[:min_len]
+            y = y[:min_len] / ds.mass if ds.mass else y[:min_len]  # Normalize by mass if available
 
             if len(x) == 0:
                 continue

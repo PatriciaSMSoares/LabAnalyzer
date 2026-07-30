@@ -1,12 +1,136 @@
 import csv
 import io
+from collections import Counter
 from pathlib import Path
+import re
 import pandas as pd
 import numpy as np
 
 
+
 class FileParseError(Exception):
     pass
+
+
+# Candidate delimiters for generic delimited-table detection, in
+# preference order when there's a tie in split-consistency. The
+# whitespace pattern uses 2+ spaces (not \s+) so that multi-word
+# column labels with a single internal space (e.g. "% Volume") don't
+# get split apart, while still separating columns that are visually
+# spaced apart in a fixed-width report.
+_DELIMITER_CANDIDATES = [',', ';', '\t', '|', r'\s{2,}']
+
+_NUMERIC_RE = re.compile(r'^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$')
+
+
+def _split_line(line: str, delimiter: str):
+    """Split a line by a candidate delimiter, whitespace-aware."""
+    stripped = line.strip('\r\n')
+    if delimiter == r'\s{2,}':
+        stripped = stripped.strip()
+        if not stripped:
+            return []
+        return re.split(r'\s{2,}', stripped)
+    return [t for t in stripped.split(delimiter)]
+
+
+def _is_numeric_token(token: str) -> bool:
+    return bool(_NUMERIC_RE.match(token.strip()))
+
+
+def detect_table_layout(lines):
+    """Generically figure out how to read a delimited/fixed-width table.
+
+    Works for plain single-delimiter CSVs as well as instrument-style
+    text reports that have a metadata/comment block and a header
+    wrapped across multiple lines before the numeric data starts.
+    Returns a dict with: delimiter, n_cols, data_start (line index of
+    the first data row), and columns (list of column names).
+    Returns None if no consistent tabular block could be found.
+    """
+    non_blank = [(i, l) for i, l in enumerate(lines) if l.strip()]
+    if not non_blank:
+        return None
+
+    # 1. Pick the delimiter whose line-splits are most consistent, i.e.
+    #    the one where the largest fraction of non-blank lines share the
+    #    same field count (the "mode"). This replaces a fixed "needs 2+
+    #    occurrences" heuristic, which breaks on ordinary 2-column files
+    #    (only 1 delimiter occurrence per line).
+    best = None  # (consistency, -pref_index, delimiter, n_cols)
+    for pref_index, delim in enumerate(_DELIMITER_CANDIDATES):
+        counts = [len(_split_line(l, delim)) for _, l in non_blank]
+        counts = [c for c in counts if c > 1]
+        if not counts:
+            continue
+        mode_count, mode_freq = Counter(counts).most_common(1)[0]
+        consistency = mode_freq / len(non_blank)
+        key = (consistency, -pref_index)
+        if best is None or key > (best[0], -best[1]):
+            best = (consistency, pref_index, delim, mode_count)
+    if best is None:
+        return None
+    _, _, delimiter, n_cols = best
+
+    # 2. Find where the numeric data actually starts: the first line
+    #    that splits into n_cols fields where most fields are numeric,
+    #    and which is followed by more lines doing the same (so a
+    #    header row that happens to also have n_cols fields doesn't get
+    #    mistaken for data).
+    def matches_data_row(line):
+        fields = _split_line(line, delimiter)
+        if len(fields) != n_cols:
+            return False
+        numeric_fields = sum(_is_numeric_token(f) for f in fields)
+        return numeric_fields >= max(1, len(fields) - 1)  # allow one label/text field
+
+    data_start = None
+    for idx, (i, line) in enumerate(non_blank):
+        if not matches_data_row(line):
+            continue
+        # confirm with a short lookahead so we don't latch onto a stray line
+        lookahead = non_blank[idx: idx + 3]
+        if sum(matches_data_row(l) for _, l in lookahead) >= min(2, len(lookahead)):
+            data_start = i
+            break
+    if data_start is None:
+        return None
+
+    # 3. Collect the header block: contiguous non-blank lines
+    #    immediately above the data start (stopping at the first blank
+    #    line or the top of the file).
+    header_lines = []
+    i = data_start - 1
+    while i >= 0 and not lines[i].strip():
+        i -= 1  # skip a single blank separator line right above the data
+    while i >= 0 and lines[i].strip():
+        header_lines.append(lines[i])
+        i -= 1
+    header_lines.reverse()
+
+    # 4. Build column names generically: use every header line whose
+    #    field count matches n_cols (name row, units row, etc.) and
+    #    join the tokens at each column position. Lines that don't
+    #    match n_cols (e.g. a wrapped continuation line) are skipped
+    #    rather than guessed at.
+    qualifying_rows = [
+        _split_line(hl, delimiter) for hl in header_lines
+        if len(_split_line(hl, delimiter)) == n_cols
+    ]
+    if qualifying_rows:
+        columns = []
+        for col_idx in range(n_cols):
+            parts = [row[col_idx].strip() for row in qualifying_rows if row[col_idx].strip()]
+            columns.append(' '.join(parts) if parts else f'Column_{col_idx}')
+    else:
+        columns = [f'Column_{i}' for i in range(n_cols)]
+
+    return {
+        'delimiter': delimiter,
+        'n_cols': n_cols,
+        'data_start': data_start,
+        'columns': columns,
+    }
 
 
 class FileLoader:
@@ -32,79 +156,55 @@ class FileLoader:
 
     def _get_parser(self, ext: str):
         parsers = {
-            '.csv': self._parse_csv,
-            '.txt': self._parse_text,
-            '.dat': self._parse_text,
+            '.csv': self._parse_delimited,
+            '.txt': self._parse_delimited,
+            '.dat': self._parse_delimited,
             '.xlsx': self._parse_excel,
             '.xls': self._parse_excel,
             '.fcd': self._parse_fcd,
             '.mpt': self._parse_eclab,
         }
-        return parsers.get(ext, self._parse_text)
+        return parsers.get(ext, self._parse_delimited)
 
-    def _parse_csv(self, path: Path) -> pd.DataFrame:
-        """Auto-detect CSV delimiter using csv.Sniffer."""
+    def _parse_delimited(self, path: Path) -> pd.DataFrame:
+        """Generic parser for CSV/TSV/whitespace-delimited text files.
+
+        Handles both plain single-header delimited tables and
+        instrument-style reports where a metadata block and a header
+        wrapped across multiple lines precede the actual numeric data
+        -- all via the same layout-detection logic, rather than a
+        format-specific parser per instrument.
+        """
         with open(path, 'r', encoding='utf-8', errors='replace') as f:
-            sample = f.read(4096)
+            lines = f.readlines()
 
-        try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=',;\t| ')
-            delimiter = dialect.delimiter
-        except csv.Error:
-            delimiter = ','
+        layout = detect_table_layout(lines)
+        if layout is None:
+            raise FileParseError(f"Could not detect a tabular structure in {path.name}")
 
-        # Try to detect header
-        try:
-            has_header = csv.Sniffer().has_header(sample)
-        except csv.Error:
-            has_header = True
+        print(
+            f"{path.name}: delimiter={layout['delimiter']!r} n_cols={layout['n_cols']} "
+            f"data_start_line={layout['data_start']} columns={layout['columns']}"
+        )
 
-        header = 0 if has_header else None
-
+        data_text = ''.join(lines[layout['data_start']:])
+        sep = layout['delimiter']
         try:
             df = pd.read_csv(
-                path,
-                sep=delimiter,
-                header=header,
-                encoding='utf-8',
-                encoding_errors='replace',
-                skip_blank_lines=True,
-            )
-        except Exception:
-            # fallback: try comma
-            df = pd.read_csv(path, header=header, encoding='utf-8')
-
-        df = self._clean_dataframe(df)
-        return df
-
-    def _parse_text(self, path: Path) -> pd.DataFrame:
-        """Parse text/dat files, trying multiple delimiters."""
-        with open(path, 'r', encoding='utf-8', errors='replace') as f:
-            sample = f.read(4096)
-
-        # Try to detect delimiter
-        for delim in ['\t', ',', ';', ' ', '|']:
-            try:
-                dialect = csv.Sniffer().sniff(sample, delimiters=delim)
-                delimiter = dialect.delimiter
-                break
-            except csv.Error:
-                continue
-        else:
-            delimiter = '\t'
-
-        try:
-            df = pd.read_csv(
-                path,
-                sep=delimiter,
-                header=0,
-                encoding='utf-8',
-                encoding_errors='replace',
-                skip_blank_lines=True,
+                io.StringIO(data_text),
+                sep=sep,
+                header=None,
+                names=layout['columns'],
                 engine='python',
+                skip_blank_lines=True,
+                quoting=csv.QUOTE_NONE if sep in (',', ';', '\t', '|') else csv.QUOTE_MINIMAL,
             )
         except Exception:
-            df = pd.read_csv(path, sep=r'\s+', header=0, encoding='utf-8')
+            # last-resort fallback: split on any whitespace
+            df = pd.read_csv(
+                io.StringIO(data_text), sep=r'\s+', header=None,
+                names=layout['columns'], engine='python',
+            )
 
         df = self._clean_dataframe(df)
         return df

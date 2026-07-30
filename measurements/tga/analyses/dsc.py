@@ -14,7 +14,7 @@ def _find_col(df, candidates):
 
 class DSCAnalysis(BaseAnalysis):
     analysis_id = 'dsc'
-    display_name = 'DSC (Heat Flow)'
+    display_name = 'DSC'
 
     def render(self, datasets, config, figure, ax=None):
         if ax is None:
@@ -28,9 +28,11 @@ class DSCAnalysis(BaseAnalysis):
             if not ds.visible:
                 continue
             df = ds.raw_data
+            print(df)
             x_col = _find_col(df, ['temperature', 'temp', '°c'])
-            y_col = _find_col(df, ['heat flow', 'heat_flow', 'dsc', 'heatflow', 'mw'])
+            y_col = _find_col(df, ['dsc'])
             num_cols = df.select_dtypes(include=[np.number]).columns
+            print(f"Dataset: {ds.display_name}, x_col: {x_col}, y_col: {y_col}, num_cols: {num_cols}")
             if x_col is None and len(num_cols) >= 1:
                 x_col = num_cols[0]
             if y_col is None and len(num_cols) >= 2:

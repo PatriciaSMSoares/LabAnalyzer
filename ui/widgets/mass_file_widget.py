@@ -6,6 +6,13 @@ from PyQt6.QtCore import pyqtSignal
 from pathlib import Path
 import pandas as pd
 
+def _find_col(df, candidates):
+    for c in candidates:
+        for col in df.columns:
+            if c.lower() in col.lower():
+                return col
+    return None
+
 
 class MassFileWidget(QWidget):
     """Excel mass-file picker and display widget."""
@@ -68,11 +75,18 @@ class MassFileWidget(QWidget):
             self._table.setRowCount(0)
 
             from labanalyzer.core.data_models import MassEntry
+
+            x_col = _find_col(df, ['Folder', 'id'])
+            y_col = _find_col(df, ['sample', 'mass', 'weight'])
+
+            folder_col = df.columns.get_loc(x_col) if x_col else 0
+            sample_col = df.columns.get_loc(y_col) if y_col else 1
+
             for _, row in df.iterrows():
                 vals = list(row)
                 if len(vals) >= 2:
                     try:
-                        entry = MassEntry(str(vals[0]), float(vals[1]))
+                        entry = MassEntry(str(vals[folder_col]), float(vals[sample_col]))
                         self._mass_entries.append(entry)
                         r = self._table.rowCount()
                         self._table.insertRow(r)

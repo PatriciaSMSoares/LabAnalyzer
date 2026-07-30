@@ -7,7 +7,7 @@ class PorosimetryMeasurement(BaseMeasurement):
     measurement_id = 'porosimetry'
     display_name = 'Porosimetry'
     requires_mass_file = True
-    supported_extensions = ['.csv', '.xlsx', '.dat']
+    supported_extensions = ['.csv', '.xlsx', '.dat', '.txt']
 
     @classmethod
     def get_analyses(cls) -> list:
@@ -15,4 +15,6 @@ class PorosimetryMeasurement(BaseMeasurement):
         from .analyses.bet_analysis import BETAnalysis
         from .analyses.pore_size_dist import PoreSizeDistAnalysis
         from .analyses.isotherm_sbet import IsothermSBETAnalysis
-        return [IsothermAnalysis, BETAnalysis, PoreSizeDistAnalysis, IsothermSBETAnalysis]
+        from .analyses.pore_size_dist_C import PoreSizeDistCAnalysis
+        from .analyses.pore_size_dist_DifVol import PoreSizeDistDifVolAnalysis
+        return [IsothermAnalysis, BETAnalysis, PoreSizeDistAnalysis, IsothermSBETAnalysis, PoreSizeDistCAnalysis, PoreSizeDistDifVolAnalysis]

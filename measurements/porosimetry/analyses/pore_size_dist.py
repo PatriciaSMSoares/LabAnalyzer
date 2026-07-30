@@ -12,7 +12,7 @@ def _find_col(df, candidates):
 
 class PoreSizeDistAnalysis(BaseAnalysis):
     analysis_id = 'psd'
-    display_name = 'Pore Size Distribution'
+    display_name = 'Pore Size Distribution (dV/dlogD vs Pore Width)'
 
     @classmethod
     def get_extra_options(cls):
@@ -39,8 +39,10 @@ class PoreSizeDistAnalysis(BaseAnalysis):
                 continue
             df = ds.raw_data
 
-            x_col = _find_col(df, ['pore width', 'pore diameter', 'pore size', 'diameter', 'width'])
-            y_col = _find_col(df, ['dv/dlogd', 'dv/dd', 'dv/dr', 'pore volume', 'volume'])
+            x_col = _find_col(df, ['pore width', 'pore diameter', 'pore size', 'diameter', 'width', 'pore'])
+            y_col = _find_col(df, ['dv/dlogd', 'dV/d(log d)'])
+
+            print(f"Dataset: {ds.display_name}, x_col: {x_col}, y_col: {y_col}")
 
             num_cols = df.select_dtypes(include=[np.number]).columns
             if x_col is None and len(num_cols) >= 1:
@@ -61,7 +63,7 @@ class PoreSizeDistAnalysis(BaseAnalysis):
                 continue
 
             color = ds.color or None
-            ax.plot(x, y, '-', color=color, label=ds.display_name, linewidth=1.5)
+            ax.plot(x, y, '.-', color=color, label=ds.display_name, linewidth=1.5)
             ax.fill_between(x, y, alpha=0.2, color=color)
             has_data = True
 

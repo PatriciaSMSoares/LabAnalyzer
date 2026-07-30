@@ -12,7 +12,6 @@ class TGAMeasurement(BaseMeasurement):
     @classmethod
     def get_analyses(cls) -> list:
         from .analyses.tga_curve import TGACurveAnalysis
-        from .analyses.dtg import DTGAnalysis
         from .analyses.dsc import DSCAnalysis
         from .analyses.tga_dsc import TGADSCAnalysis
-        return [TGACurveAnalysis, DTGAnalysis, DSCAnalysis, TGADSCAnalysis]
+        return [TGACurveAnalysis, DSCAnalysis, TGADSCAnalysis]

@@ -8,6 +8,7 @@ class DataSet:
     file_path: Path
     display_name: str
     raw_data: pd.DataFrame
+    mass : float | None = None
     group_name: str = ''
     color: str = ''
     visible: bool = True
