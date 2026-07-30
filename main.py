@@ -4,9 +4,6 @@ import traceback
 import logging
 from pathlib import Path
 
-# Ensure the project root is on the path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 # Ensure the project root (current directory) is on the path
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
